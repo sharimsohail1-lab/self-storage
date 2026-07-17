@@ -94,6 +94,44 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isRunningBehindProxy() {
+  return Boolean(process.env.HTTPS_PROXY || process.env.https_proxy);
+}
+
+function resolveChromiumLaunchOptions() {
+  const options = { headless: true, executablePath: resolveChromiumExecutable(), args: [] };
+  // Chromium does not read HTTPS_PROXY itself — pass it explicitly if the
+  // environment routes outbound traffic through a proxy (e.g. a sandboxed
+  // agent environment with a policy-enforcing egress proxy).
+  if (isRunningBehindProxy()) {
+    options.proxy = { server: process.env.HTTPS_PROXY || process.env.https_proxy };
+    // Some TLS-terminating egress proxies reset the connection on Chromium's
+    // TLS 1.3 ClientHello (its post-quantum hybrid key share makes it large
+    // enough to span multiple TCP segments, which such proxies mishandle).
+    // Forcing TLS 1.2 avoids it. Only applied when a proxy is detected — a
+    // normal machine reaching the site directly doesn't need this downgrade.
+    options.args.push('--ssl-version-max=tls1.2');
+  }
+  return options;
+}
+
+function contextOptionsForCurrentEnv() {
+  // The proxy re-terminates TLS with its own CA; ignore cert errors only
+  // when actually running behind it, not on a normal direct connection.
+  return isRunningBehindProxy() ? { ignoreHTTPSErrors: true } : {};
+}
+
+function resolveChromiumExecutable() {
+  // Some environments pre-install a pinned Chromium build and block network
+  // access to Playwright's own browser CDN. If PLAYWRIGHT_BROWSERS_PATH points
+  // at one, use it directly instead of letting Playwright try to download.
+  const candidate = process.env.PLAYWRIGHT_BROWSERS_PATH
+    ? path.join(process.env.PLAYWRIGHT_BROWSERS_PATH, 'chromium')
+    : null;
+  if (candidate && fs.existsSync(candidate)) return candidate;
+  return undefined; // let Playwright resolve its normally-installed browser
+}
+
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
@@ -362,8 +400,8 @@ async function inspectReport(page, url, label) {
 async function runInspect() {
   assertCredentials();
   ensureDir(INSPECT_DIR);
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  const browser = await chromium.launch(resolveChromiumLaunchOptions());
+  const page = await browser.newPage(contextOptionsForCurrentEnv());
   try {
     await login(page);
     await debugDump(page, 'post-login-landing');
@@ -610,8 +648,8 @@ async function exportToExcel(report1Rows, report2Result) {
 async function runFull() {
   assertCredentials();
   ensureDir(OUT_DIR);
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  const browser = await chromium.launch(resolveChromiumLaunchOptions());
+  const page = await browser.newPage(contextOptionsForCurrentEnv());
   try {
     await login(page);
     const report1Rows = await scrapeReport1(page);
