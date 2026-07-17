@@ -1,0 +1,15 @@
+{
+  "name": "tractiq-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright scraper for hub.tractiq.com report data, exported to Excel",
+  "type": "commonjs",
+  "scripts": {
+    "inspect": "node scrape.js inspect",
+    "run": "node scrape.js run"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "playwright": "^1.56.1"
+  }
+}
