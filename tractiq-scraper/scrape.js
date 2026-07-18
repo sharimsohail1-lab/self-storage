@@ -478,17 +478,25 @@ async function exportToExcel(report1Data, report2Api, report2Sheets) {
       { header: 'Avg Facility Sqft', key: 'avg_rent_sqft', width: 16 },
       { header: 'REIT Facility Count', key: 'reit_count', width: 16 },
       { header: 'Climate-Controlled Unit Count', key: 'cc_unit_count', width: 20 },
+      { header: 'Sqft Per Capita', key: 'sqft_per_capita', width: 16 },
+      { header: 'US Sqft Per Capita', key: 'us_sqft_per_capita', width: 18 },
       { header: 'As Of', key: 'as_of', width: 16 },
     ],
     allIds
       .filter((id) => report1Data.supply[id])
-      .map((id) => ({
-        id,
-        name: msaLookup.get(id).name,
-        state: msaLookup.get(id).state,
-        ...report1Data.supply[id],
-        as_of: report1Data.lastUpdated,
-      }))
+      .map((id) => {
+        const population = report1Data.demographics[id]?.population;
+        const totalRentSqft = report1Data.supply[id].total_rent_sqft;
+        return {
+          id,
+          name: msaLookup.get(id).name,
+          state: msaLookup.get(id).state,
+          ...report1Data.supply[id],
+          sqft_per_capita: population ? Number((totalRentSqft / population).toFixed(2)) : null,
+          us_sqft_per_capita: report1Data.usSqftPerCapita,
+          as_of: report1Data.lastUpdated,
+        };
+      })
   );
 
   addSheet(
